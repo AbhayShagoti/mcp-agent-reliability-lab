@@ -9,6 +9,7 @@ htmlcov/
 dist/
 *.egg-info/
 data/*.db
+models/
 .eval-tmp/
 .terraform/
 *.tfstate
