@@ -1,0 +1,14 @@
+{
+  "requests": 200,
+  "concurrency": 10,
+  "errors": 0,
+  "elapsed_s": 1.1949,
+  "rps": 167.383,
+  "latency_ms": {
+    "p50": 56.973,
+    "p95": 80.059,
+    "mean": 58.915
+  },
+  "provider": "mock",
+  "note": "API overhead with the deterministic mock LLM, not a local model. The per-token rate limit was raised to 100000/min so the sample is not 429s."
+}

@@ -1,0 +1,14 @@
+# Render free web service. 512 MB cannot load a model, so this demo stays on the mock LLM.
+services:
+  - type: web
+    name: agent-reliability-lab
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: ARL_LLM_PROVIDER
+        value: mock
+      - key: ARL_API_TOKEN
+        value: dev-token
+      - key: ARL_DATABASE_URL
+        value: sqlite:////tmp/ops.db

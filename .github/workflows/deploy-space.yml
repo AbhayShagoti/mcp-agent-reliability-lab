@@ -1,0 +1,23 @@
+name: Deploy Hugging Face Space
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  push-space:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish app/space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_SPACE_ID: ${{ secrets.HF_SPACE_ID }}
+        run: |
+          if [ -z "${HF_TOKEN}" ] || [ -z "${HF_SPACE_ID}" ]; then
+            echo "Set HF_TOKEN and HF_SPACE_ID repository secrets before running this workflow."
+            exit 1
+          fi
+          python -m pip install --upgrade huggingface_hub
+          huggingface-cli upload "${HF_SPACE_ID}" app/space . --repo-type space --commit-message "Deploy Agent Reliability Lab demo"

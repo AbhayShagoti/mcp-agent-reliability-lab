@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: arl-api
+  labels:
+    app: arl-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: arl-api
+  template:
+    metadata:
+      labels:
+        app: arl-api
+    spec:
+      containers:
+        - name: api
+          image: arl-api:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+          env:
+            - name: ARL_LLM_PROVIDER
+              value: mock
+            - name: ARL_DATABASE_URL
+              value: sqlite:////data/ops.db
+            - name: ARL_API_TOKEN
+              value: dev-token
+            - name: ARL_TODAY
+              value: "2026-11-01"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          emptyDir: {}

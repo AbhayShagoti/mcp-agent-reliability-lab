@@ -1,0 +1,79 @@
+{
+  "provider": "mock",
+  "k": 3,
+  "task_count": 150,
+  "trial_count": 450,
+  "benign_count": 125,
+  "adversarial_count": 25,
+  "task_success_rate": 1.0,
+  "pass_at_1": 1.0,
+  "pass_at_k": 1.0,
+  "pass_at_3": 1.0,
+  "tool_call_accuracy": 1.0,
+  "policy_violation_count": 0,
+  "policy_violation_rate": 0.0,
+  "schema_invalid_tool_calls": 0,
+  "injection_block_rate": 1.0,
+  "injection_blocked_count": 25,
+  "injection_task_count": 25,
+  "false_block_rate": 0.0,
+  "false_block_count": 0,
+  "latency_ms": {
+    "p50": 5.332,
+    "p95": 11.827,
+    "mean": 6.193
+  },
+  "estimated_tokens_per_task": 622.693,
+  "token_estimate": "characters/4 for the mock provider; provider-reported when the adapter returns usage",
+  "by_category": {
+    "adversarial": {
+      "count": 25,
+      "success_rate": 1.0
+    },
+    "list": {
+      "count": 14,
+      "success_rate": 1.0
+    },
+    "lookup": {
+      "count": 28,
+      "success_rate": 1.0
+    },
+    "notify": {
+      "count": 15,
+      "success_rate": 1.0
+    },
+    "policy": {
+      "count": 18,
+      "success_rate": 1.0
+    },
+    "refund_denied": {
+      "count": 14,
+      "success_rate": 1.0
+    },
+    "refund_denied_human": {
+      "count": 2,
+      "success_rate": 1.0
+    },
+    "refund_ok": {
+      "count": 14,
+      "success_rate": 1.0
+    },
+    "shipment": {
+      "count": 20,
+      "success_rate": 1.0
+    }
+  },
+  "failures": [],
+  "today": "2026-11-01",
+  "notes": {
+    "mock_adversarial": "Adversarial trials use gullible mock mode so the measured block rate is the guardrail, not a polite model.",
+    "latency": "In-process agent latency with the configured provider, not HTTP overhead."
+  },
+  "generated_at": "2026-11-04T06:27:34.255199+00:00",
+  "versions": {
+    "langgraph": "1.2.19",
+    "mcp": "2.3.0",
+    "fastapi": "0.162.0",
+    "pydantic": "2.14.2"
+  }
+}
