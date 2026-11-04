@@ -112,6 +112,13 @@ def test_injection_and_pii() -> None:
     assert scrub_pii("hello").blocked is False
 
 
+def test_output_schema_accepts_fenced_json() -> None:
+    raw = 'Sure.\n```json\n{"answer": "Order ORD-1001 is delivered.", "refused": false}\n```'
+    parsed, repaired = parse_agent_response(raw)
+    assert parsed.answer.startswith("Order ORD-1001")
+    assert repaired is True
+
+
 def test_output_schema_repairs_plain_text() -> None:
     parsed, repaired = parse_agent_response("not json")
     assert repaired and parsed.answer == "not json"

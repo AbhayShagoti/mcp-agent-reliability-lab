@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from arl.config import Settings
-from arl.llm.http import AnthropicLLM, OllamaLLM, OpenAILLM
+from arl.llm.http import AnthropicLLM, OllamaLLM, OpenAICompatibleLLM, OpenAILLM
 from arl.llm.mock import MockLLM
 from arl.llm.types import LLMClient
 
@@ -22,6 +22,8 @@ def build_llm(settings: Settings) -> LLMClient:
         if not settings.anthropic_api_key:
             raise RuntimeError("ANTHROPIC_API_KEY is not set; refusing to start the Anthropic provider")
         return AnthropicLLM(settings.anthropic_api_key, settings.anthropic_model)
+    if provider == "llamacpp":
+        return OpenAICompatibleLLM(settings.llamacpp_base_url, settings.llamacpp_model)
     if provider == "hf":
         raise RuntimeError(
             "The hf provider is used by the Gradio Space (app/space), not the API server. Use mock or ollama here."

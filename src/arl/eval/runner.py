@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sqlite3
 import statistics
 import time
@@ -109,6 +110,12 @@ async def run_suite(
                     values,
                     saw_interrupt=saw_interrupt,
                 )
+                if os.environ.get("ARL_EVAL_PROGRESS"):
+                    print(
+                        f"{task.id} seed={seed_value} ok={graded.success} {elapsed_ms:.0f}ms",
+                        flush=True,
+                    )
+                answer = str((values.get("response") or {}).get("answer") or "")
                 trials.append(
                     {
                         "task_id": task.id,
@@ -125,6 +132,7 @@ async def run_suite(
                         "false_block": graded.false_block,
                         "latency_ms": elapsed_ms,
                         "tokens": int(values.get("tokens_in") or 0) + int(values.get("tokens_out") or 0),
+                        "answer": answer[:400],
                     }
                 )
     finally:
@@ -210,8 +218,11 @@ def _summarize(
                 {
                     "task_id": task.id,
                     "category": task.category,
+                    "attack_type": task.attack_type,
                     "reasons": seed0["reasons"],
                     "violations": seed0["violations"],
+                    "guardrail_types": seed0["guardrail_types"],
+                    "answer": seed0.get("answer", ""),
                 }
             )
     benign_count = sum(1 for task in tasks if task.split == "benign")
@@ -249,6 +260,27 @@ def _summarize(
             name: {"count": len(flags), "success_rate": _rate(sum(flags), len(flags))}
             for name, flags in sorted(category_hits.items())
         },
+        "task_results": [
+            {
+                "task_id": task.id,
+                "split": task.split,
+                "category": task.category,
+                "attack_type": task.attack_type,
+                "success": bool(next(row for row in by_task[task.id] if row["seed"] == 0)["success"]),
+                "pass_at_k": all(row["success"] for row in by_task[task.id]),
+                "tools_ok": bool(next(row for row in by_task[task.id] if row["seed"] == 0)["tools_ok"]),
+                "reasons": next(row for row in by_task[task.id] if row["seed"] == 0)["reasons"],
+                "violations": next(row for row in by_task[task.id] if row["seed"] == 0)["violations"],
+                "guardrail_types": next(row for row in by_task[task.id] if row["seed"] == 0)["guardrail_types"],
+                "schema_invalid": next(row for row in by_task[task.id] if row["seed"] == 0)["schema_invalid"],
+                "latency_ms": round(
+                    statistics.fmean(float(row["latency_ms"]) for row in by_task[task.id]),
+                    3,
+                ),
+                "answer": next(row for row in by_task[task.id] if row["seed"] == 0).get("answer", ""),
+            }
+            for task in tasks
+        ],
         "failures": failures,
         "today": FIXED_TODAY.isoformat(),
         "notes": {

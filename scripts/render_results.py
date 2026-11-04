@@ -12,6 +12,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 START = "<!-- RESULTS:START -->"
 END = "<!-- RESULTS:END -->"
+REAL_START = "<!-- REAL:START -->"
+REAL_END = "<!-- REAL:END -->"
+ANALYSIS_START = "<!-- ANALYSIS:START -->"
+ANALYSIS_END = "<!-- ANALYSIS:END -->"
 
 
 def _load(path: Path) -> dict[str, object]:
@@ -68,9 +72,38 @@ def build_table(eval_report: dict[str, object], load: dict[str, object], coverag
         lines.append(f"| {name} | {value} | `{source}` |")
     lines.append("")
     lines.append(
-        "Local-model latency and task success were not measured in the environment "
-        "that produced this table. The nightly workflow runs that subset when Ollama is available."
+        "This table is the CI baseline. The mock is deterministic, so pass^3 equals pass^1. "
+        "It checks the harness, not a neural model. The Qwen table below is the local-model run."
     )
+    return "\n".join(lines)
+
+
+def build_real_table(report: dict[str, object]) -> str:
+    latency = report["latency_ms"]
+    if not isinstance(latency, dict):
+        raise ValueError("latency section missing")
+    artifact = "reports/qwen25_1_5b.json"
+    rows = [
+        ("Task success (pass^1)", _pct(report["task_success_rate"])),
+        ("pass^3", _pct(report["pass_at_3"])),
+        ("Tool-call accuracy", _pct(report["tool_call_accuracy"])),
+        ("Policy violations", str(report["policy_violation_count"])),
+        ("Schema-invalid tool calls", str(report["schema_invalid_tool_calls"])),
+        ("Injection block rate", _pct(report["injection_block_rate"])),
+        ("False-block rate", _pct(report["false_block_rate"])),
+        ("End-to-end p50 / p95", f"{latency['p50']} ms / {latency['p95']} ms"),
+        ("Provider tokens / task", str(report["estimated_tokens_per_task"])),
+    ]
+    lines = [
+        "Qwen2.5-1.5B-Instruct, GGUF Q4_K_M, llama.cpp b12099, 4 CPU threads, no GPU. "
+        f"{report['task_count']} tasks, k={report['k']}, {report['trial_count']} trials. "
+        "Same grader as the mock table.",
+        "",
+        "| Metric | Value | Artifact |",
+        "| --- | --- | --- |",
+    ]
+    for name, value in rows:
+        lines.append(f"| {name} | {value} | `{artifact}` |")
     return "\n".join(lines)
 
 
@@ -87,6 +120,18 @@ def main() -> None:
     before, rest = text.split(START, 1)
     _, after = rest.split(END, 1)
     updated = f"{before}{START}\n{table}\n{END}{after}"
+    real_path = ROOT / "reports" / "qwen25_1_5b.json"
+    if real_path.exists() and REAL_START in updated and REAL_END in updated:
+        real = build_real_table(_load(real_path))
+        head, tail = updated.split(REAL_START, 1)
+        _, tail = tail.split(REAL_END, 1)
+        updated = f"{head}{REAL_START}\n{real}\n{REAL_END}{tail}"
+    analysis_path = ROOT / "reports" / "qwen25_1_5b_analysis.md"
+    if analysis_path.exists() and ANALYSIS_START in updated and ANALYSIS_END in updated:
+        analysis = analysis_path.read_text().strip()
+        head, tail = updated.split(ANALYSIS_START, 1)
+        _, tail = tail.split(ANALYSIS_END, 1)
+        updated = f"{head}{ANALYSIS_START}\n{analysis}\n{ANALYSIS_END}{tail}"
     readme.write_text(updated)
     print(table)
 

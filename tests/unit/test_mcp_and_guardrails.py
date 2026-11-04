@@ -14,7 +14,7 @@ from arl.config import Settings
 from arl.guardrails.allowlist import downgrade_for_untrusted_output, tools_for_intent
 from arl.llm.factory import build_llm
 from arl.llm.hf import generate, render_prompt
-from arl.llm.http import AnthropicLLM, OllamaLLM, OpenAILLM
+from arl.llm.http import AnthropicLLM, OllamaLLM, OpenAICompatibleLLM, OpenAILLM
 from arl.llm.mock import MockLLM, format_money, parse_cents
 from arl.llm.types import ChatMessage, ToolSchema
 from arl.mcp.client import decode_tool_result
@@ -201,6 +201,43 @@ async def test_http_providers_parse_tool_calls() -> None:
         result = await AnthropicLLM("sk-ant", "claude", client).complete(messages, [], 0)
         assert result.tool_calls[0].id == "toolu_1"
         assert "looking" in result.content
+
+
+@pytest.mark.asyncio
+async def test_openai_compatible_parses_tool_arguments() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path.endswith("/chat/completions")
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": "",
+                            "tool_calls": [
+                                {
+                                    "id": "c1",
+                                    "function": {
+                                        "name": "get_order",
+                                        "arguments": {"order_id": "ORD-1001"},
+                                    },
+                                }
+                            ],
+                        }
+                    }
+                ],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 4},
+            },
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        result = await OpenAICompatibleLLM("http://llama/v1", "qwen", client=client).complete(
+            [ChatMessage(role="user", content="status")],
+            [ToolSchema(name="get_order", description="get", parameters={"type": "object"})],
+            seed=0,
+        )
+    assert result.tool_calls[0].arguments["order_id"] == "ORD-1001"
+    assert result.input_tokens == 10
 
 
 def test_hf_prompt_uses_injected_runner() -> None:

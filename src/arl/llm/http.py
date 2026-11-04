@@ -120,6 +120,85 @@ class OpenAILLM:
         )
 
 
+class OpenAICompatibleLLM:
+    """Chat-completions client for llama-server or any other OpenAI-compatible host."""
+
+    def __init__(
+        self,
+        base_url: str,
+        model: str,
+        api_key: str | None = None,
+        client: httpx.AsyncClient | None = None,
+        max_tokens: int = 256,
+    ) -> None:
+        self.base_url = base_url.rstrip("/")
+        self.model = model
+        self.api_key = api_key
+        self._client = client
+        self.max_tokens = max_tokens
+
+    async def complete(
+        self,
+        messages: list[ChatMessage],
+        tools: list[ToolSchema],
+        seed: int,
+    ) -> LLMResult:
+        payload: dict[str, Any] = {
+            "model": self.model,
+            "temperature": 0,
+            "max_tokens": self.max_tokens,
+            "seed": seed,
+            "messages": [_openai_message(message) for message in messages],
+        }
+        if tools:
+            payload["tools"] = [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": tool.name,
+                        "description": tool.description,
+                        "parameters": tool.parameters,
+                    },
+                }
+                for tool in tools
+            ]
+        headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else None
+        data = await _post(self._client, f"{self.base_url}/chat/completions", payload, headers)
+        choice = data["choices"][0]["message"]
+        calls: list[ToolCall] = []
+        for index, raw in enumerate(choice.get("tool_calls") or []):
+            function = raw.get("function") or {}
+            arguments = _parse_arguments(function.get("arguments"))
+            calls.append(
+                ToolCall(
+                    id=str(raw.get("id") or f"call-{index}"),
+                    name=str(function.get("name") or ""),
+                    arguments=arguments,
+                )
+            )
+        usage = data.get("usage") or {}
+        return LLMResult(
+            str(choice.get("content") or ""),
+            calls,
+            int(usage.get("prompt_tokens") or 0),
+            int(usage.get("completion_tokens") or 0),
+        )
+
+
+def _parse_arguments(raw: Any) -> dict[str, Any]:
+    if isinstance(raw, dict):
+        return raw
+    if not isinstance(raw, str) or not raw.strip():
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return {"_raw": raw}
+    if isinstance(parsed, dict):
+        return parsed
+    return {"_raw": raw}
+
+
 class AnthropicLLM:
     def __init__(
         self,

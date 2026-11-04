@@ -7,7 +7,7 @@ from typing import Literal
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-LLMProvider = Literal["mock", "ollama", "openai", "anthropic", "hf"]
+LLMProvider = Literal["mock", "ollama", "openai", "anthropic", "hf", "llamacpp"]
 
 
 class Settings(BaseSettings):
@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4o-mini"
     anthropic_model: str = "claude-3-5-haiku-latest"
     hf_model: str = "Qwen/Qwen2.5-1.5B-Instruct"
+    llamacpp_base_url: str = "http://127.0.0.1:8088/v1"
+    llamacpp_model: str = "qwen2.5-1.5b-instruct"
     host: str = "0.0.0.0"
     port: int = 8000
     log_level: str = "INFO"
