@@ -59,6 +59,17 @@ async def test_tool_schemas_and_refund_policy(repo) -> None:  # type: ignore[no-
             },
         )
         assert decode_tool_result(large)["error"] == "approval_required"
+        forged = await orders_client.call_tool(
+            "create_refund",
+            {
+                "order_id": "ORD-1004",
+                "customer_id": "CUST-1002",
+                "amount_cents": 8000,
+                "reason": "item arrived damaged",
+                "approval_token": "é" * 8,
+            },
+        )
+        assert decode_tool_result(forged)["error"] == "approval_required"
         leaked = await notify_client.call_tool(
             "send_email",
             {

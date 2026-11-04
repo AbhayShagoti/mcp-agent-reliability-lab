@@ -18,7 +18,9 @@ def token_matches(
     amount_cents: int,
     presented: str | None,
 ) -> bool:
-    if not presented:
+    # compare_digest rejects non-ASCII str with TypeError. A model-supplied token
+    # is untrusted input, so a bad token is a mismatch, not an exception.
+    if not presented or not presented.isascii():
         return False
     expected = approval_token(secret, order_id, customer_id, amount_cents)
     return hmac.compare_digest(expected, presented)

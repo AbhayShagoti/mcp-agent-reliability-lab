@@ -65,6 +65,7 @@ def test_approval_token_is_bound_to_the_amount() -> None:
     assert not token_matches("secret", "ORD-1004", "CUST-1002", 8001, token)
     assert not token_matches("secret", "ORD-1004", "CUST-1002", 8000, None)
     assert not token_matches("secret", "ORD-1004", "CUST-1002", 8000, "")
+    assert not token_matches("secret", "ORD-1004", "CUST-1002", 8000, "é" * 64)
 
 
 def test_seed_is_stable_and_idempotent(repo) -> None:  # type: ignore[no-untyped-def]
