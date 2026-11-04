@@ -1,0 +1,41 @@
+name: Nightly local model
+
+on:
+  schedule:
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+
+jobs:
+  ollama:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+      - name: Install Ollama and pull Qwen2.5 1.5B
+        run: |
+          curl -fsSL https://ollama.com/install.sh | sh
+          ollama serve >/tmp/ollama.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:11434/api/tags && break
+            sleep 2
+          done
+          ollama pull qwen2.5:1.5b-instruct
+      - run: uv sync --frozen --all-groups
+      - name: Run the 40-task subset
+        env:
+          ARL_LLM_PROVIDER: ollama
+          ARL_OLLAMA_MODEL: qwen2.5:1.5b-instruct
+          ARL_OLLAMA_BASE_URL: http://127.0.0.1:11434
+        run: |
+          mkdir -p reports/nightly
+          uv run python -m arl.eval.cli \
+            --ids-file evals/nightly40.txt \
+            --k 1 \
+            --output reports/nightly/ollama_qwen25_1_5b.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nightly-eval
+          path: reports/nightly/

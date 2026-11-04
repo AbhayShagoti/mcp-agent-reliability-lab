@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: arl-api
+  labels:
+    app: arl-api
+spec:
+  selector:
+    app: arl-api
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http

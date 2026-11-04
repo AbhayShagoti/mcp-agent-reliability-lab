@@ -1,0 +1,147 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: arl
+      POSTGRES_PASSWORD: arl
+      POSTGRES_DB: arl
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U arl -d arl"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  seed:
+    build: .
+    command: ["arl-seed", "--database-url", "postgresql://arl:arl@postgres:5432/arl"]
+    environment:
+      ARL_TODAY: "2026-11-01"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  orders:
+    build: .
+    command: ["arl-orders-mcp"]
+    environment:
+      ARL_DATABASE_URL: postgresql://arl:arl@postgres:5432/arl
+      ARL_TODAY: "2026-11-01"
+      ARL_MCP_HOST: 0.0.0.0
+      ARL_MCP_PORT: "8000"
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    ports:
+      - "8101:8000"
+
+  policy:
+    build: .
+    command: ["arl-policy-mcp"]
+    environment:
+      ARL_DATABASE_URL: postgresql://arl:arl@postgres:5432/arl
+      ARL_TODAY: "2026-11-01"
+      ARL_MCP_HOST: 0.0.0.0
+      ARL_MCP_PORT: "8000"
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    ports:
+      - "8102:8000"
+
+  notify:
+    build: .
+    command: ["arl-notify-mcp"]
+    environment:
+      ARL_DATABASE_URL: postgresql://arl:arl@postgres:5432/arl
+      ARL_TODAY: "2026-11-01"
+      ARL_MCP_HOST: 0.0.0.0
+      ARL_MCP_PORT: "8000"
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    ports:
+      - "8103:8000"
+
+  api:
+    build: .
+    command: ["arl-api"]
+    environment:
+      ARL_LLM_PROVIDER: mock
+      ARL_DATABASE_URL: postgresql://arl:arl@postgres:5432/arl
+      ARL_REDIS_URL: redis://redis:6379/0
+      ARL_OTEL_ENDPOINT: http://jaeger:4317
+      ARL_ORDERS_MCP_URL: http://orders:8000/mcp
+      ARL_POLICY_MCP_URL: http://policy:8000/mcp
+      ARL_NOTIFY_MCP_URL: http://notify:8000/mcp
+      ARL_API_TOKEN: dev-token
+      ARL_TODAY: "2026-11-01"
+      ARL_HOST: 0.0.0.0
+      ARL_PORT: "8000"
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      orders:
+        condition: service_started
+      policy:
+        condition: service_started
+      notify:
+        condition: service_started
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.62.0
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"
+      - "4317:4317"
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    volumes:
+      - ./deploy/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      - api
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+    volumes:
+      - ./deploy/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus

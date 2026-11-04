@@ -1,0 +1,108 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "id": 1,
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(arl_http_request_duration_seconds_bucket[1m])))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(arl_http_request_duration_seconds_bucket[1m])))",
+          "legendFormat": "p95",
+          "refId": "B"
+        }
+      ],
+      "title": "HTTP latency",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "id": 2,
+      "targets": [
+        {
+          "expr": "sum by (tool, status) (rate(arl_tool_calls_total[1m]))",
+          "legendFormat": "{{tool}} {{status}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Tool calls",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "id": 3,
+      "targets": [
+        {
+          "expr": "sum by (rule) (rate(arl_guardrail_blocks_total[1m]))",
+          "legendFormat": "{{rule}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Guardrail blocks",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "id": 4,
+      "targets": [
+        {
+          "expr": "sum by (direction) (rate(arl_llm_tokens_total[1m]))",
+          "legendFormat": "{{direction}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Token throughput",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+      "id": 5,
+      "targets": [
+        {
+          "expr": "sum by (tool) (rate(arl_tool_errors_total[1m]))",
+          "legendFormat": "{{tool}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Tool errors",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+      "id": 6,
+      "targets": [
+        {
+          "expr": "sum by (status) (rate(arl_http_requests_total[1m]))",
+          "legendFormat": "{{status}}",
+          "refId": "A"
+        }
+      ],
+      "title": "HTTP requests",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 39,
+  "tags": ["arl"],
+  "time": {"from": "now-15m", "to": "now"},
+  "timezone": "browser",
+  "title": "Agent Reliability Lab",
+  "uid": "arl-overview",
+  "version": 1
+}

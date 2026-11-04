@@ -1,0 +1,110 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+          enable-cache: true
+      - run: uv sync --frozen --all-groups
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy --strict src
+      - run: uv run pytest --cov=arl --cov-report=term-missing --cov-fail-under=80
+      - run: uv run python -m arl.eval.cli --output reports/ci_eval.json --k 3
+      - run: uv run python -m arl.eval.gate --report reports/ci_eval.json
+
+  integration:
+    needs: quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+      - run: docker compose up --build -d
+      - name: Wait for the API
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:8000/health; then
+              exit 0
+            fi
+            sleep 5
+          done
+          docker compose logs
+          exit 1
+      - name: Chat smoke
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf -N http://127.0.0.1:8000/v1/chat \
+              -H 'Authorization: Bearer dev-token' \
+              -H 'Content-Type: application/json' \
+              -d '{"message":"What is the status of order ORD-1001?","customer_id":"CUST-1001"}' \
+              | tee /tmp/chat.txt && grep -q delivered /tmp/chat.txt; then
+              exit 0
+            fi
+            sleep 3
+          done
+          docker compose logs api orders
+          exit 1
+      - run: docker compose down -v
+        if: always()
+
+  terraform:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: deploy/terraform/aws
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+      - uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: v0.53.0
+      - run: terraform init -backend=false
+      - run: terraform validate
+      - run: tflint --init
+      - run: tflint --chdir=.
+
+  kind:
+    needs: quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: helm/kind-action@v1.12.0
+        with:
+          cluster_name: arl
+      - run: docker build -t arl:local .
+      - run: kind load docker-image arl:local --name arl
+      - run: bash deploy/k8s/smoke.sh
+
+  image:
+    needs: [quality, integration]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          tags: ghcr.io/${{ github.repository }}:${{ github.sha }}
