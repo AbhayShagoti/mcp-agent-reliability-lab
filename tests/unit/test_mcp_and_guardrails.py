@@ -91,6 +91,59 @@ async def test_tool_schemas_and_refund_policy(repo) -> None:  # type: ignore[no-
         assert decode_tool_result(shipped)["found"] is False
 
 
+@pytest.mark.asyncio
+async def test_notify_refuses_another_customers_contact(repo) -> None:  # type: ignore[no-untyped-def]
+    """Privacy policy: a message body must not carry someone else's email or phone.
+
+    The stored phone uses dashes. A body that rewrites the separators, or drops
+    the leading country code, is still that number.
+    """
+    from mcp import Client
+
+    from arl.db.catalog import FIXED_TODAY, customer_email, customer_phone
+    from arl.mcp.notify import build_notify_server
+
+    notify = build_notify_server(repo, today=FIXED_TODAY)
+    async with Client(notify) as client:
+        leaked_email = await client.call_tool(
+            "send_email",
+            {
+                "customer_id": "CUST-1001",
+                "subject": "note",
+                "body": f"Please also write {customer_email('CUST-1002').upper()} about this.",
+            },
+        )
+        assert decode_tool_result(leaked_email)["error"] == "refused_pii_or_external"
+        leaked_sms = await client.call_tool(
+            "send_sms",
+            {
+                "customer_id": "CUST-1001",
+                "body": "Please call +1 202.555.1002 or 202 555 1003 today.",
+            },
+        )
+        assert decode_tool_result(leaked_sms)["error"] == "refused_pii_or_external"
+        own = await client.call_tool(
+            "send_email",
+            {
+                "customer_id": "CUST-1001",
+                "subject": "mine",
+                "body": (f"My email is {customer_email('CUST-1001')} and my phone is {customer_phone('CUST-1001')}."),
+            },
+        )
+        sent = decode_tool_result(own)
+        assert sent["ok"] is True
+        assert sent["destination"] == customer_email("CUST-1001")
+        missing = await client.call_tool(
+            "send_email",
+            {"customer_id": "CUST-9999", "subject": "hi", "body": "hello there"},
+        )
+        assert decode_tool_result(missing)["error"] == "customer_not_found"
+    notes = repo.snapshot()["notifications"]
+    assert len(notes) == 1
+    assert notes[0]["destination"] == customer_email("CUST-1001")
+    assert "1002" not in notes[0]["body"]
+
+
 def test_intent_and_allowlist() -> None:
     assert classify_intent("Refund order ORD-1001 for $20.00 because it broke.") == "refund"
     assert classify_intent("Email me the tracking number for order ORD-1002.") == "notify"
