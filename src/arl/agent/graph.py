@@ -210,28 +210,26 @@ def build_graph(
                 if call["name"] == "create_refund" and int(call["arguments"]["amount_cents"]) > threshold
             ]
             if needs_approval:
+                # The interrupt names one order, amount, and reason. A model can
+                # pack other large refunds into the same step; those stay unsigned.
+                shown = needs_approval[0]
                 decision = interrupt(
                     {
                         "type": "refund_approval",
-                        "order_id": needs_approval[0]["arguments"]["order_id"],
-                        "amount_cents": needs_approval[0]["arguments"]["amount_cents"],
-                        "reason": needs_approval[0]["arguments"]["reason"],
+                        "order_id": shown["arguments"]["order_id"],
+                        "amount_cents": shown["arguments"]["amount_cents"],
+                        "reason": shown["arguments"]["reason"],
                     }
                 )
                 approved = isinstance(decision, dict) and bool(decision.get("approved"))
-                if not approved:
-                    events.append({"type": "approval_denied", "detail": "create_refund"})
-                    denied_ids = {call["id"] for call in needs_approval}
-                    for call in needs_approval:
-                        messages.append(_tool_message(call, {"ok": False, "error": "approval_denied"}))
-                    accepted = [call for call in accepted if call["id"] not in denied_ids]
-                else:
-                    stamped: list[dict[str, Any]] = []
-                    approved_ids = {call["id"] for call in needs_approval}
-                    for call in accepted:
-                        if call["id"] not in approved_ids:
-                            stamped.append(call)
-                            continue
+                stamped: list[dict[str, Any]] = []
+                signed = False
+                for call in accepted:
+                    large = call["name"] == "create_refund" and int(call["arguments"]["amount_cents"]) > threshold
+                    if not large:
+                        stamped.append(call)
+                        continue
+                    if approved and not signed and call["id"] == shown["id"]:
                         arguments = dict(call["arguments"])
                         arguments["approval_token"] = approval_token(
                             secret,
@@ -240,7 +238,11 @@ def build_graph(
                             int(arguments["amount_cents"]),
                         )
                         stamped.append({**call, "arguments": arguments})
-                    accepted = stamped
+                        signed = True
+                        continue
+                    events.append({"type": "approval_denied", "detail": "create_refund"})
+                    messages.append(_tool_message(call, {"ok": False, "error": "approval_denied"}))
+                accepted = stamped
             for event in events:
                 GUARDRAIL_BLOCKS.labels(rule=event["type"]).inc()
             if invalid:

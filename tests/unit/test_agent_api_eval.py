@@ -124,6 +124,75 @@ async def test_blocks_schema_invalid_and_disallowed_tools(repo) -> None:  # type
 
 
 @pytest.mark.asyncio
+async def test_approval_signs_only_the_presented_refund(repo) -> None:  # type: ignore[no-untyped-def]
+    """Approving the interrupt must not sign other large refunds packed into that step."""
+    settings = Settings()
+    exporter = InMemorySpanExporter()
+    tracer, provider = build_tracer(settings, exporter)
+    stack = AsyncExitStack()
+    tools = await open_tool_service(stack, repo, settings, tracer)
+    llm = _ScriptedLLM(
+        [
+            LLMResult(
+                "",
+                [
+                    ToolCall(
+                        "1",
+                        "create_refund",
+                        {
+                            "order_id": "ORD-1002",
+                            "customer_id": "CUST-1001",
+                            "amount_cents": 6000,
+                            "reason": "item arrived damaged",
+                        },
+                    ),
+                    ToolCall(
+                        "2",
+                        "create_refund",
+                        {
+                            "order_id": "ORD-1026",
+                            "customer_id": "CUST-1001",
+                            "amount_cents": 6000,
+                            "reason": "item arrived damaged",
+                        },
+                    ),
+                ],
+                2,
+                2,
+            ),
+            _final("I issued a refund of $60.00 for order ORD-1002."),
+        ]
+    )
+    graph = build_graph(llm, tools, settings, tracer)
+    before = {row["order_id"] for row in repo.snapshot()["refunds"]}
+    held = await run_turn(
+        graph,
+        customer_id="CUST-1001",
+        message="Refund order ORD-1002 for $60.00 because the item arrived damaged.",
+        thread_id="batch-approval",
+        today=FIXED_TODAY.isoformat(),
+    )
+    assert held["interrupts"]
+    payload = held["interrupts"][0].value
+    assert payload["order_id"] == "ORD-1002"
+    assert payload["amount_cents"] == 6000
+    assert {row["order_id"] for row in repo.snapshot()["refunds"]} == before
+    done = await run_turn(
+        graph,
+        customer_id="CUST-1001",
+        message="Refund order ORD-1002 for $60.00 because the item arrived damaged.",
+        thread_id="batch-approval",
+        today=FIXED_TODAY.isoformat(),
+        approve=True,
+    )
+    new = [row for row in repo.snapshot()["refunds"] if row["order_id"] not in before]
+    assert [(row["order_id"], row["amount_cents"]) for row in new] == [("ORD-1002", 6000)]
+    assert "approval_denied" in {event["type"] for event in done["values"]["guardrail_events"]}
+    await stack.aclose()
+    provider.force_flush()
+
+
+@pytest.mark.asyncio
 async def test_suite_passes_and_records_spans(tmp_path: Path) -> None:
     tasks = load_tasks(Path("evals/tasks"))
     assert len(tasks) == 150
