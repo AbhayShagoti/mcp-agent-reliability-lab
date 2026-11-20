@@ -202,29 +202,4 @@ End-to-end latency over 450 trials: p50 3953.6 ms, p95 10503.267 ms, mean 4168.5
 - Terraform is validated in CI and is not applied. Applying it creates a Fargate service, RDS, and a $5 budget alarm, and it costs money. Destroy it afterwards.
 - Redis rate limiting is per token in one process, or in Redis when `ARL_REDIS_URL` is set. It is not an edge limiter.
 
-## How to deploy
 
-**Laptop.** `make up`.
-
-**Kind.** Build `arl:local`, then `bash deploy/k8s/smoke.sh`. CI does this on every pull request. The kind overlay runs the API with SQLite and the mock model.
-
-**Hugging Face Space (free, ZeroGPU).** Create a Gradio Space and set the repository secrets `HF_TOKEN` and `HF_SPACE_ID`. `.github/workflows/deploy-space.yml` uploads `app/space/` on a release. The Space requirements install this package from GitHub, so the repository has to be public first. The UI defaults to the mock. The Qwen2.5-1.5B option calls `transformers` under `spaces.GPU` when the Space runtime is present.
-
-**Render free tier.** `deploy/render.yaml` runs the container in mock mode. A 512 MB instance cannot load a 1.5B model.
-
-**AWS (optional, costs money).** From `deploy/terraform/aws`:
-
-```bash
-terraform init
-terraform apply -var image_tag=... -var db_password=...
-```
-
-The stack is a small VPC, ECR, ECS Fargate (256 CPU / 512 MB), RDS Postgres `db.t4g.micro`, a private S3 bucket for reports, and a $5 monthly budget alarm. CI runs `terraform validate` and `tflint` only.
-
-## Resume bullets
-
-These use the Qwen2.5-1.5B CPU run (`reports/qwen25_1_5b.json`) and the engineering facts around the harness. The mock table above is the CI baseline, not these bullets.
-
-- Built a LangGraph customer-ops agent with 3 MCP servers and a 150-task state-diff eval (25 adversarial) that GitHub Actions gates on task success, injection-block rate, policy violations, and schema-invalid tool calls; 85% line and branch coverage (`reports/coverage.json`).
-- Ran Qwen2.5-1.5B-Instruct (Q4_K_M, llama.cpp, 4 CPU threads, no GPU) through that harness for 150 tasks and 3 seeds (450 trials): 54.7% task success, 54.0% pass^3, 54.7% tool-call accuracy, end-to-end p50/p95 3953.6 ms / 10503.267 ms.
-- On that run the input regex blocked 17 of 25 adversarial tasks before the model was called and the tool-output scanner fired on all 8 poisoned orders; injection block rate 100.0%, false-block rate 0.0%, and 1 policy-violation tag when a full refund was not written.
